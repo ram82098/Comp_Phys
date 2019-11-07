@@ -1,0 +1,248 @@
+!Module for our differential eqns:
+!Module+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Module serpentsting
+
+       Implicit None
+       Save
+       Contains
+
+       Function dpdr(r, mp ,d)
+
+          Implicit None
+
+          Double Precision :: ee,e, cf, r, pie, d, term1
+          Double Precision :: dmsun_mev, dmsun_km,gama
+          Double Precision, Dimension(2) :: mp,dpdr
+
+	  Integer:: n
+
+          pie=acos(-1.0)
+          gama=0.90
+
+!conversion factors:
+          dmsun_mev = 1.115829d60
+          dmsun_km  = 1.475
+          cf        = (dmsun_km*1.e18)/dmsun_mev
+
+!dmdr: (mass of object)
+          dpdr(1) = 4.*pie*r*r*d*gama
+
+!Relatavistic Case:
+          term1=(1.-2.*mp(1)*cf/r)**gama
+          dpdr(2)=-(d+mp(2))*(0.5*r+4*pie*r**3*mp(2)*(cf)-r*0.5*term1)&
+                    /(r*r*(1.-2.*mp(1)*cf/r)**gama)
+       End Function dpdr
+
+
+!linear interpolation for EoS:
+       Function interpolate1(n,refval,e,p)
+         Implicit None
+!         use types, only: dp
+         real*8 :: interpolate1
+         integer :: n
+         real*8, intent(in) :: refval ! reference value
+         real*8, dimension(n), intent(in) :: e
+         real*8, dimension(n), intent(in) :: p
+         integer :: s1,s2 ! subscript holders
+         s1 = maxloc(e,1,mask=e<refval) ! subscript of value below refval
+         s2 = minloc(e,1,mask=e>refval) ! subscript of value above refval
+         interpolate1 = (p(s2)-p(s1))/(e(s2)-e(s1))*(refval-e(s1))+p(s1)
+      End Function interpolate1
+End Module
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+!Start of main Program======================================================
+       Program TOV
+
+!---------------------------------------------------------------------------
+! FORTRAN program to solve hydrostatic equilibrium eqns for both the
+! newtonian case as well the general relativistic (TOV eqns) case using
+! Runge Kutta 4th order methods.
+!
+! This code will calculate stellar properties such as pressure, radius and
+! densities of compact stars (neutron & quark stars).  This code uses the
+! crust+core EoS model for neutron stars.
+!---------------------------------------------------------------------------
+
+!use module:
+       Use serpentsting
+
+!Declare your variables:
+       Implicit None
+
+       Double Precision :: ee,dr, deltaec, d, q
+       Double Precision :: ec, pc, bag, r, pie,term1
+       Double Precision :: dmsun_km, dmsun_mev, cf, gama
+       Double Precision :: h, k1, k2, k3, k4, mp, dnew, dtemp
+
+
+       Real*8, dimension(317) :: e
+       Real*8, dimension(317) :: p
+
+
+       Integer:: i, n, s1, s2
+
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!variables definitions:
+!
+!dr=dr--stepsize, deltaec--change in central density
+!ec--central density, pc--central pressure, e & p--density & pressure
+!r--radius, pie=PI=3.14159...etc, bag=bag contant in Mev/fm^3
+!dmsun_km, dmsun_mev--conversion factors, cf--conversion factor to Mev/fm^3
+!k1,k2,k3,k4--rk4 variables
+!md--2-dim array for mass & density
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+!two dimensional arrays for rk4 variables:
+       DIMENSION k1(2)
+       DIMENSION k2(2)
+       DIMENSION k3(2)
+       DIMENSION k4(2)
+
+!2D array for mass-pressure:
+!note:  mp(2) is pressure & mp(1) is mass:
+       DIMENSION mp(2)
+
+!---------------------------------------------------------------------------
+!user input:
+       Write(*,*)''
+       Print*, "***********************************"
+       Print*, "Welcome to the Hydrostatic solver."
+       Print*, "***********************************"
+       Write(*,*)''
+
+!---------------------------------------------------------------------------
+
+       mp(1)=0  !initial mass (i.e. I.C.)
+
+!conversion factors:
+       dmsun_mev = 1.115829d60
+       dmsun_km  = 1.475
+
+       cf = (dmsun_km*1.e18)/dmsun_mev
+
+
+       read*,gama   !deformation constant
+
+       pie = acos(-1.0)  !Pie=3.14159...
+
+
+!open data files:
+      if (gama == 1.1) then
+       Open (Unit=1, File='gama1_1.dat', Status = 'unknown')
+
+      else if (gama ==1.2) then
+       Open (Unit=2, File='gama1_2.dat', Status = 'unknown')
+      
+       Open (Unit=3, File='gama1_3.dat', Status = 'unknown')
+       Open (Unit=4, File='gama1_4.dat', Status = 'unknown')
+       Open (Unit=5, File='gama1_5.dat', Status = 'unknown')
+       Open (Unit=6, File='gama0_5.dat', Status = 'unknown')
+       Open (Unit=7, File='gama0_6.dat', Status = 'unknown')
+       Open (Unit=8, File='gama0_7.dat', Status = 'unknown')
+       Open (Unit=9, File='gama0_8.dat', Status = 'unknown')
+       Open (Unit=10, File='gama0_9.dat', Status = 'unknown')
+
+       Open (Unit=25, File='ccnjl.dat', Status='old')
+       Open (Unit=50, File='single_qvsm1-00.dat', Status='unknown')
+!       Open (Unit=77, File='single_qvseq0-00.dat', Status='unknown')
+!       Open (Unit=87, FIle='single_qvspr0-00.dat', Status='unknown')
+!       Open (Unit=60, File='gam01-20epvsr.dat', Status='unknown')
+!       Open (Unit=70, File='gama1-20epvsz.dat', Status='unknown')
+!       Open (Unit=80, File='gama1-20edvsr.dat', Status='unknown')
+!       Open (Unit=90, File='gama1-20edvsz.dat', Status='unknown')
+
+!read in EoS data file:
+       Do i =1,317
+        Read(25,*) e(i), p(i)
+       end do
+
+
+!initialize central density of 1st stellar model
+      ! ec=912.98    !gama = 1.0
+       ec = 934.98   !gama = 0.90
+       deltaec = 2.0
+
+       d=ec
+       mp(1)=0
+
+       r = 1.e16  !initial radial distance in fermi
+
+!Call EoS interpolate function:
+         mp(2) = interpolate1(317,d,e,p)
+
+       Do While (mp(2) .gt. 0.)
+
+         dr = 1.e16  !step size in fermi
+         ee=ec
+
+
+!********************************RK4****************************************
+         h = dr  !stepsize
+
+!rk4 variables:
+         k1(:) = h*dpdr(r,mp(:), d)
+         dtemp = interpolate1(317,mp(2)+k1(2)/2.,p,e)
+         k2(:) = h*dpdr(r+h/2.0,mp(:)+k1(:)/2.0, dtemp)
+         dtemp = interpolate1(317,mp(2)+k2(2)/2.,p,e)
+         k3(:) = h*dpdr(r+h/2.0,mp(:)+k2(:)/2.0, dtemp)
+         dtemp = interpolate1(317,mp(2)+k3(2),p,e)
+         k4(:) = h*dpdr(r+h,mp(:)+k3(:), dtemp)
+
+!approx. solution to dpdr:
+         mp(:) = mp(:) + (k1(:) + 2.0*(k2(:)+k3(:)) + k4(:))/6.0
+
+!***************************************************************************
+
+!Next density interpolate:
+         d = interpolate1(317,mp(2),p,e)
+!mass-quadrupole moment:
+         q = (gama/3.)*((mp(1)/dmsun_mev)**3)*(1-gama**2)
+         !q = (gama/3.)*(mp(1)**3)*(1-gama**2)
+
+         r = r + dr  !increment radius
+
+!output in data files:
+
+if (gama == 1.1) then
+Write(1,*)
+End if
+
+
+
+!         Write(60,*) r/1.e18, mp(2)
+!         Write(70,*) (gama*r)/1.e18, mp(2)
+!         Write(80,*) r/1.e18, d
+!         Write(90,*) (gama*r)/1.e18, d
+         Write(50,*) (mp(1)/dmsun_mev), q
+!         Write(77,*) q,((r)/1.e18)
+!         Write(87,*) q,((gama*r)/1.e18)
+        ! print*, q/dmsun_mev
+       End Do
+!***************************************************************************
+!                         output on terminal:                              *
+!***************************************************************************
+
+       Print *,' R=', r/1.e18, 'km,', '  M=', mp(1)/dmsun_mev,'M_sun'
+       Print *,' Z=', (gama*r)/1.e18, 'km,', '  M=', mp(1)/dmsun_mev,'M_sun'
+
+
+         ! Print*,'Q=',(q/dmsun_mev)
+
+!***************************************************************************
+!central density of next stellar model:
+
+       ec = ec - deltaec
+
+
+!format output:
+20     Format(2x,f8.4,4x,f8.4)
+
+!       End Do
+
+       STOP
+
+       End Program TOV
+!End of Main================================================================

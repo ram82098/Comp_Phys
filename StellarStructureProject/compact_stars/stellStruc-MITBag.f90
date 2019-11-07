@@ -1,0 +1,138 @@
+!****************************************************************************
+! FORTRAN 90 code that solves the hydrostatic equilibrium equations for the *
+! classical Newtonian case and General Relativistic case (dP/dr & dm/dr)    *
+! using Euler's Method for solving coupled ODE's.                           *
+!****************************************************************************
+
+!****************** Written by Omair Zubairi @ WIT **************************
+
+!****************************************************************************
+! This code will use the quark (i.e. MIT Bag Model) Equation of State (EoS) *
+! and will produce stellar properties such as mass, radius, and density of  *
+! a stellar compact object.                                                 *
+!****************************************************************************
+
+!***************************** START OF CODE ********************************
+
+Program stellarStructure
+       
+!**************** Declare your variables, parameters, ect... ****************
+
+        Implicit None
+
+        Double Precision :: e_c, p_c, e, p, f, pdr,g
+        Double Precision :: pi, bag, rmsun_km, deltaec
+        
+        Double Precision:: rmsun_mev,k_0
+        Double Precision:: cf, rm, r, dr
+	 
+        
+        Integer :: n
+        
+        Data rmsun_mev/1.115829d60/,rmsun_km/1.475/
+
+        Parameter (pi=acos(-1.0))
+!****************************************************************************
+
+        !user input
+        Print*,'Enter (1) for Newtonian or (2) for Relativistic'
+        Read*, n
+	      
+        Open (Unit=9, File='rvp.dat',Status='unknown') 
+	Open (Unit=14, File='rve.dat',Status='unknown')   
+        If (n == 1) Then
+           !Newtonian Case*****************************************
+	   Open (Unit=20, File='newton_pvsd.dat', Status='unknown')
+           Open (Unit=10, File='newton_mvsr.dat', Status='unknown')    
+           Open (Unit=11, File='newton_mvsd.dat', Status='unknown')
+            
+        Else
+           !GR case********************************************
+           Open (Unit=21, File='ein_pvsd.dat', Status='unknown')
+           Open (Unit=12, File='ein_mvsr.dat', Status='unknown')       
+           Open (Unit=13, File='ein_mvsd.dat', Status='unknown')  
+	  
+        End If   
+        
+
+        cf  = rmsun_km*1.e18/rmsun_mev        ! conversion factor
+        !bag = 57.0			! Bag constant in MeV/fm^3
+	g = 2
+	                           
+        k_0 =3.548E-4
+        		                ! Initialize central density of
+        !e_c=10.0                     ! 1st stellar model
+        e_c=1122.
+                                              
+        deltaec = 1.0             ! change in central density        
+        
+        Do While (e_c <= 10000)         ! Compute sequence of stellar model           
+	   !p_c = (e_c - 4.*bag)/3      ! MIT Bag model for the quark EoS
+	   p_c = k_0*e_c**(g)		! Polytrope model
+           rm  = 0.0                   ! Initialize Mass 
+           r   = 1e16                ! Initial radial distance in fermi 
+           dr  = 1e16                     ! Step size in fermi
+          
+           e   = e_c
+           p   = p_c
+           
+        !Inner loop for building spherical shells until the pressure vanishes
+           Do While (p > 0.)
+             If (n == 1) Then
+             
+               !Newtonian Case
+               f = -(e * rm * cf / (r*r))
+             Else
+               
+               ! G.R. case
+               f=-((e+p)*(4.*pi*r**3*p+rm)*cf/(r*r*(1.-2.*rm*cf/r))) 
+               
+             End If
+             
+               rm = rm + 4.*pi*r*r*e*dr  ! Integrate Mass
+               pdr = p + f * dr          ! Euler's Method (approx. solution)
+               p = pdr
+               e = (pdr/k_0)**(1/g)
+               r = r + dr                ! Increment radius
+	
+             End Do                        ! Inner loop end
+           
+           e_c = e_c + deltaec           ! Central density of next stellar
+                                         ! model
+          
+!******************* printing results on the terminal ***********************
+
+         Print *,' R=', r/1.e18, 'km,', '  M=', rm/rmsun_mev,'M_sun'
+         
+         !write out results to an output file:
+	 write(21,*)e_c,p_c
+	 write(9,*)r/1.e18, p_c
+         write(14,*)r/1.e18, e_c
+         If (n == 1) Then
+	  
+            Write(10,*) r/1.e18, rm/rmsun_mev  !mass-radius relation (Newton)
+            Write(11,*) e_c , rm/rmsun_mev      !mass-density relation(Newton)
+            
+         Else
+         
+            Write(12,*) r/1.e18, rm/rmsun_mev  !mass-radius relation (GR)
+            Write(13,*) e_c, rm/rmsun_mev      !mass-density relation (GR)
+	  
+        End If
+        
+!********************** formatting terminal output **************************
+ 20     Format(2x,f8.4,4x,f8.4)
+ 
+       End do                        !Outer loop end  
+        
+        !close out data files:
+        Close (Unit = 10)
+        Close (Unit = 11)
+        Close (Unit = 12)
+        Close (Unit = 13)
+        Close (Unit = 9)
+	Close (Unit = 14)
+        Close (Unit = 20)
+	Close (Unit = 21)
+STOP
+End Program stellarStructure    

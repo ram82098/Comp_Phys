@@ -1,0 +1,87 @@
+Program Euler1
+
+Implicit none 
+
+Double precision :: dxdt
+Double precision :: dt
+Double precision :: xi,ti,xf,tf
+Double precision :: tmax,x,t
+
+Integer :: i,n
+
+!using dx
+External dxdt
+
+open(unit=1,file='results-exact.dat',status='unknown')
+open(unit=2,file='results-euler.dat',status='unknown')
+
+!initial conditions:
+xi=1.0
+ti=0.0
+
+!step-size and max time:
+Print*,'Enter a time-step'
+Read*,dt
+tmax=2.0
+
+!########################################################
+	!exact solution:
+	Do i=1,20
+
+	t = i*dt
+	x=exp(-t)
+	write(1,100)t,x
+
+
+	End do 
+
+
+!loop to solve ode:
+
+	Do while(ti .le. tmax)
+
+	!increment step-size:
+	
+	print*,xf
+	Write(2,100)tf,xf
+
+	!re-declare
+	ti = tf
+	xi = xf
+
+
+	end do
+
+!format output:
+100	Format(2f10.5)
+
+stop
+End program
+
+Function dxdt(t,x)
+	Implicit none 
+
+	double precision :: dxdt,x,t
+
+	dxdt = -(1.0)*x		!our ODE (exact solution x=exp(-t))
+
+End function
+
+Subroutine euler(dxdt(t,x))
+ Implicit none 
+
+ Double precision :: tf,ti,dt,dxdt,xi,xf
+
+
+tf = ti + dt
+xf = xi +dxdt(ti,xi)*dt
+
+end subroutine 
+
+
+	
+
+
+
+
+
